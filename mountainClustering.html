@@ -1,0 +1,407 @@
+<script src="https://code.highcharts.com/highcharts.js"></script>
+<script src="https://code.highcharts.com/highcharts-3d.js"></script>
+
+<script>
+	function weightedRandom(maximum, numberRandoms, offset) {
+		let result = 0;
+		for (let i = 0; i < numberRandoms; ++i)
+			result += ((Math.random() + offset) * (maximum / numberRandoms)) ;
+		return result;
+	}
+
+	function getRandomDataXY() {
+		let countStr = 150;
+		let data = [];
+		let offset = 0;
+
+		for (let j = 0; j < countStr; ++j)
+		{
+			if(j == 50)
+			{
+				offset = 3;
+			}
+			else if(j == 100)
+			{
+				offset = 6;
+			}
+			
+			data.push({
+				x: weightedRandom(20, 1, offset),
+				y: weightedRandom(20, 1, offset),
+				marker: {
+					fillColor: "blue"
+				}
+			});		
+		}
+			
+		return data;
+	}
+
+	function getDistancePoints(x1, y1, x2, y2) {
+		return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+	}
+	
+	function getDistanceDictionary(pointsXY)
+	{
+		let summdist = 0.0;
+		
+		let pointsDist = {},
+			avrDist = 0.0;
+		
+		for (let i = 0; i < pointsXY.length; ++i)
+		{
+			for (let j = 0; j < pointsXY.length; ++j)
+			{
+				d = getDistancePoints(pointsXY[i].x, pointsXY[i].y, pointsXY[j].x, pointsXY[j].y);
+				let key = [
+					pointsXY[i].x,
+					pointsXY[i].y,
+					
+					pointsXY[j].x,
+					pointsXY[j].y
+				];
+
+				pointsDist[key] = d;
+				
+				summdist += d;
+			}	
+		}
+		
+		avrDist = summdist / (pointsXY.length * (pointsXY.length - 1) / 2);
+		
+		return {
+			pointsDist,
+			avrDist
+		};
+	}
+
+	function getDataWithPotential(pointsXY, pDist)
+	{
+		let centersClust =
+		{
+			x: 0.0,
+			y: 0.0,	
+			p: -Infinity
+		};
+		
+		let pointsXYZ = [];
+		
+		for (let i = 0; i < pointsXY.length; ++i)
+		{
+			let poten = 0.0;
+			for (let j = i + 1; j < pointsXY.length; ++j)
+			{
+				let key = [
+					pointsXY[i].x,
+					pointsXY[i].y,
+					
+					pointsXY[j].x,
+					pointsXY[j].y
+				];			
+				
+				poten += Math.exp(-1/pDist.avrDist * pDist.pointsDist[key]);
+			}
+			
+			pointsXYZ.push({
+				x: pointsXY[i].x,
+				y: poten,
+				z: pointsXY[i].y,
+				marker: {
+					fillColor: "blue"
+				}
+			});
+			
+			if (poten > centersClust.p)
+			{
+				centersClust.p = poten;
+				centersClust.x = pointsXY[i].x;
+				centersClust.y = pointsXY[i].y;
+			}
+		}
+		
+		for (let i = 0; i < pointsXYZ.length; ++i)
+		{
+			if (pointsXYZ[i].y == centersClust.p)
+			{
+				pointsXYZ[i].marker.fillColor = "red";
+			}
+		}
+		
+		for (let i = 0; i < pointsXY.length; ++i)
+		{
+			if ((pointsXY[i].x == centersClust.x) && (pointsXY[i].y == centersClust.y))
+			{
+				pointsXY[i].marker.fillColor = "red";
+			}
+		}
+		
+		return {
+			pointsXYZ,
+			centersClust
+		};
+	}
+	
+	function getOnlyPotential(pointsXYZ)
+	{
+		let dataPoten = [];
+		for (let i = 0; i < pointsXYZ.length; ++i)
+		{
+			dataPoten.push(pointsXYZ[i].y);
+		}
+		
+		dataPoten.sort(function(first, second) {
+			return first - second;
+		});
+		
+		return dataPoten;
+	}
+	
+	function updatePotential(pointsXY, pointsXYZ, lastCenter, pDist)
+	{
+		let centersClust =
+		{
+			x: 0.0,
+			y: 0.0,	
+			p: -Infinity
+		};
+		
+		let pNew = 0.0;
+		
+		for (let i = 0; i < pointsXYZ.length; ++i)
+		{
+			let key = [
+				pointsXYZ[i].x,
+				pointsXYZ[i].z,
+				
+				lastCenter.x,
+				lastCenter.y
+			];
+			
+			pNew = pointsXYZ[i].y - 
+				 lastCenter.p * 
+				 Math.exp(-1/pDist.avrDist * pDist.pointsDist[key]);
+			
+			pointsXYZ[i].y = pNew;
+			
+			if (pNew > centersClust.p)
+			{
+				centersClust.p = pNew;
+				centersClust.x = pointsXYZ[i].x;
+				centersClust.y = pointsXYZ[i].z;
+			}
+		}
+		
+		for (let i = 0; i < pointsXYZ.length; ++i)
+		{
+			if (pointsXYZ[i].y == centersClust.p)
+			{
+				pointsXYZ[i].marker.fillColor = "red";
+			}
+		}
+		
+		for (let i = 0; i < pointsXY.length; ++i)
+		{
+			if ((pointsXY[i].x == centersClust.x) && (pointsXY[i].y == centersClust.y))
+			{
+				pointsXY[i].marker.fillColor = "red";
+			}
+		}
+		
+		return {
+			centersClust
+		};
+	}
+
+	var centersClust = [];
+	
+	var temp;
+
+	var dataXY = getRandomDataXY();//getRandomDataXY();
+
+	var distP = getDistanceDictionary(dataXY);
+
+	temp = getDataWithPotential(dataXY, distP);
+
+	var dataXYZ = temp.pointsXYZ;
+
+	centersClust.push(temp.centersClust);
+	
+	
+	var dataPoten = getOnlyPotential(dataXYZ);
+	
+	temp = updatePotential(dataXY, dataXYZ, centersClust[centersClust.length - 1], distP);
+	centersClust.push(temp.centersClust);
+	
+	var dataPoten2 = getOnlyPotential(dataXYZ);
+	
+	temp = updatePotential(dataXY, dataXYZ, centersClust[centersClust.length - 1], distP);
+	centersClust.push(temp.centersClust);
+	
+	var dataPoten3 = getOnlyPotential(dataXYZ);
+	
+	//temp = updatePotential(dataXY, dataXYZ, centersClust[centersClust.length - 1], distP);
+	//centersClust.push(temp.centersClust);
+	
+	// temp = updatePotential(dataXY, dataXYZ, centersClust[centersClust.length - 1], distP);
+	// centersClust.push(temp.centersClust);
+	
+
+</script>
+
+<div style="display: flex; flex-direction: row; flex-wrap: nowrap;">
+
+<div id="container1" style="width:700px; height:500px;">
+	<script>
+		var chart = new Highcharts.chart('container1', {
+			chart: {
+				type: 'scatter',
+			},
+			title: {
+				text: 'Генерация случайных точек'
+			},
+			// yAxis: {
+				// min: 0,
+				// max: 50
+			// },
+			// xAxis: {
+				// min: 0,
+				// max: 40,
+				// gridLineWidth: 1
+			// },
+			series: [{
+				data: dataXY,
+				marker: {
+					symbol: 'circle'
+				}
+			}
+			]
+		});
+	</script>
+</div>
+<br></br>
+
+<div id="container2" style="width:700px; height:500px;">
+	<script>
+		var chart2 = new Highcharts.chart('container2', {
+			chart: {
+				type: 'scatter3d',
+				//zoomType: 'xy',
+				options3d: {
+					enabled: true,
+					alpha: 20,
+					beta: 30,
+					depth: 400,
+					viewDistance: 10,
+					frame: {
+						bottom: {
+							size: 1,
+							color: 'rgba(0,0,0,0.05)'
+						}
+					}
+				}
+			},
+			title: {
+				text: 'Определение потенциалов точек'
+			},
+			// yAxis: {
+				// min: 0,
+				// max: 50
+			// },
+			// xAxis: {
+				// min: 0,
+				// max: 40,
+				// gridLineWidth: 1
+			// },
+			// zAxis: {
+				// min: 0,
+				// max: 50,
+				// showFirstLabel: false
+			// },
+			series: [{
+				data: dataXYZ,
+				marker: {
+					symbol: 'circle'
+				}
+			}
+			]
+		});
+
+		// Add mouse and touch events for rotation
+		(function (H) {
+			function dragStart(eStart) {
+				eStart = chart2.pointer.normalize(eStart);
+
+				var posX = eStart.chartX,
+					posY = eStart.chartY,
+					alpha = chart2.options.chart.options3d.alpha,
+					beta = chart2.options.chart.options3d.beta,
+					sensitivity = 5,  // lower is more sensitive
+					handlers = [];
+
+				function drag(e) {
+					// Get e.chartX and e.chartY
+					e = chart2.pointer.normalize(e);
+
+					chart2.update({
+						chart: {
+							options3d: {
+								alpha: alpha + (e.chartY - posY) / sensitivity,
+								beta: beta + (posX - e.chartX) / sensitivity
+							}
+						}
+					}, undefined, undefined, false);
+				}
+
+				function unbindAll() {
+					handlers.forEach(function (unbind) {
+						if (unbind) {
+							unbind();
+						}
+					});
+					handlers.length = 0;
+				}
+
+				handlers.push(H.addEvent(document, 'mousemove', drag));
+				handlers.push(H.addEvent(document, 'touchmove', drag));
+
+
+				handlers.push(H.addEvent(document, 'mouseup', unbindAll));
+				handlers.push(H.addEvent(document, 'touchend', unbindAll));
+			}
+			H.addEvent(chart2.container, 'mousedown', dragStart);
+			H.addEvent(chart2.container, 'touchstart', dragStart);
+		}(Highcharts));
+	</script>
+</div>
+
+</div>
+<br></br>
+
+<div id="container3" style="width:700px; height:500px;">
+
+<script>
+	var chart3 = new Highcharts.chart('container3', {
+		chart: {
+			type: 'line',	
+		},
+		title: {
+			text: 'Упорядоченные значения потенциалов'
+		},
+
+		series: [{
+			data: dataPoten,
+			marker: {
+				symbol: 'circle'
+			}
+			
+			},
+			{
+				data: dataPoten2
+			},
+			{
+				data: dataPoten3
+			}
+		]
+	});
+</script>
+
